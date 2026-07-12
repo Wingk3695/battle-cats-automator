@@ -18,6 +18,7 @@ from maa_common import CAPTURE_DIR, RESOURCE_DIR, make_adb_controller
 STAGE_ID = "pacman_cookie_01"
 TEMPLATE_DIR = RESOURCE_DIR / "image" / STAGE_ID
 CONFIG_PATH = RESOURCE_DIR / "config" / f"{STAGE_ID}.json"
+CALIBRATION_PATH = Path(__file__).resolve().parents[1] / ".maa" / f"{STAGE_ID}_calibration.json"
 
 
 class State(enum.Enum):
@@ -78,6 +79,8 @@ class BattleRunner:
         self.click_interval = click_interval
         self.start_only = start_only
         config = {} if start_only else load_run_config()
+        self.coordinate_calibration = load_coordinate_calibration()
+        self.screen_size: tuple[int, int] | None = None
         self.slot5 = None if start_only else load_point(config, "slot5")
         self.result_safe_click = None if start_only else load_point(config, "result_safe_click")
         self.leadership_restore_yes = None if start_only else load_point(config, "leadership_restore_yes")
@@ -180,7 +183,7 @@ class BattleRunner:
         if self.slot5 is None:
             raise RuntimeError("slot5 is not configured.")
 
-        x, y = self.slot5
+        x, y = self.map_point(self.slot5)
         self.log("[BATTLE] click slot 5")
         self.controller.post_click(x, y).wait()
 
@@ -188,7 +191,7 @@ class BattleRunner:
         if self.result_safe_click is None:
             raise RuntimeError("result_safe_click is not configured.")
 
-        x, y = self.result_safe_click
+        x, y = self.map_point(self.result_safe_click)
         self.log("[RESULT] close overlay attempt")
         self.controller.post_click(x, y).wait()
 
@@ -221,7 +224,7 @@ class BattleRunner:
 
         self.log("[INTERRUPT] leadership shortage detected")
         self.log("[INTERRUPT] click restore: yes")
-        self.controller.post_click(*self.leadership_restore_yes).wait()
+        self.controller.post_click(*self.map_point(self.leadership_restore_yes)).wait()
         self.wait_until_template_gone("leadership_restore_dialog", timeout=8.0)
         self.log("[INTERRUPT] resolved")
         return State.UNKNOWN
@@ -232,7 +235,7 @@ class BattleRunner:
 
         self.log("[INTERRUPT] ex stage prompt detected")
         self.log("[INTERRUPT] click ex stage: yes")
-        self.controller.post_click(*self.ex_stage_yes).wait()
+        self.controller.post_click(*self.map_point(self.ex_stage_yes)).wait()
         self.wait_until_template_gone("ex_stage_prompt", timeout=8.0)
         self.log("[INTERRUPT] resolved")
         return State.BATTLE_LOADING
@@ -291,7 +294,28 @@ class BattleRunner:
 
     def screenshot(self) -> np.ndarray:
         image_result = self.controller.post_screencap().wait().get()
-        return image_result.get() if hasattr(image_result, "get") else image_result
+        image = image_result.get() if hasattr(image_result, "get") else image_result
+        self.screen_size = (int(image.shape[1]), int(image.shape[0]))
+        return image
+
+    def map_point(self, point: tuple[int, int]) -> tuple[int, int]:
+        calibration = self.coordinate_calibration
+        if calibration is None:
+            return point
+        if self.screen_size is None:
+            self.screenshot()
+        assert self.screen_size is not None
+        reference_width, reference_height = calibration["reference_size"]
+        device_width, device_height = self.screen_size
+        scale = device_height / reference_height
+        x = device_width / 2 + (point[0] - reference_width / 2) * scale
+        y = device_height / 2 + (point[1] - reference_height / 2) * scale
+        mapped = (
+            min(device_width - 1, max(0, round(x))),
+            min(device_height - 1, max(0, round(y))),
+        )
+        self.log(f"[coordinate-map] {point} -> {mapped} scale={scale:.4f}")
+        return mapped
 
     def transition(self, old: State, new: State) -> None:
         self.log(f"[{old.value}] -> [{new.value}]")
@@ -379,6 +403,19 @@ def require_assets(required_keys: tuple[str, ...], require_slot: bool) -> None:
 def load_run_config() -> dict:
     with CONFIG_PATH.open("r", encoding="utf-8") as file:
         return json.load(file)
+
+
+def load_coordinate_calibration() -> dict | None:
+    if not CALIBRATION_PATH.exists():
+        return None
+    with CALIBRATION_PATH.open("r", encoding="utf-8") as file:
+        calibration = json.load(file)
+    if calibration.get("mapping") != "screen_center_height_scale":
+        raise ValueError(f"Unsupported coordinate mapping in {CALIBRATION_PATH}.")
+    size = calibration.get("reference_size")
+    if not isinstance(size, list) or len(size) != 2 or min(size) <= 0:
+        raise ValueError(f"Invalid reference_size in {CALIBRATION_PATH}.")
+    return calibration
 
 
 def load_point(config: dict, key: str) -> tuple[int, int]:

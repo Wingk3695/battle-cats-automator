@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import shutil
 from pathlib import Path
 
@@ -79,7 +80,10 @@ class AdaptiveBattleRunner(base.BattleRunner):
             with Image.open(spec.path) as template:
                 scale_x = detail.box.w / template.width
                 scale_y = detail.box.h / template.height
-            scale_text = f" scale=({scale_x:.3f},{scale_y:.3f})"
+            scale_text = (
+                f" scale=({scale_x:.3f},{scale_y:.3f})"
+                f" box=({detail.box.x},{detail.box.y},{detail.box.w},{detail.box.h})"
+            )
         if score is None:
             self.log(f"[detect-adaptive] {key}: hit={hit}{scale_text}")
         else:
@@ -132,19 +136,82 @@ def main() -> None:
         draw = ImageDraw.Draw(preview)
         colors = {"stage_ready_marker": "lime", "start_button": "red"}
         hits = 0
+        detected_centers: dict[str, tuple[float, float]] = {}
         for key in required_keys:
             detail = runner.recognize(key, image)
             if detail is None or detail.box is None:
                 continue
             hits += 1
             box = detail.box
+            detected_centers[key] = (box.x + box.w / 2, box.y + box.h / 2)
             draw.rectangle((box.x, box.y, box.x + box.w, box.y + box.h), outline=colors[key], width=4)
             draw.text((box.x, max(0, box.y - 14)), key, fill=colors[key])
         output = base.CAPTURE_DIR / "pacman_cookie_01_adaptive_calibration.png"
         preview.save(output)
+        validation = validate_center_mapping(detected_centers, runner.screen_size)
+        if hits == len(required_keys) and validation["accepted"]:
+            base.CALIBRATION_PATH.parent.mkdir(parents=True, exist_ok=True)
+            with base.CALIBRATION_PATH.open("w", encoding="utf-8") as file:
+                json.dump(validation, file, ensure_ascii=False, indent=2)
+                file.write("\n")
+            print(f"[adaptive] coordinate calibration saved: {base.CALIBRATION_PATH}", flush=True)
+        elif hits == len(required_keys):
+            print("[adaptive] center mapping rejected: residual is too large; calibration not saved", flush=True)
         print(f"[adaptive] calibration hits={hits}/{len(required_keys)} preview={output}", flush=True)
         return
     runner.run_many(args.runs)
+
+
+def validate_center_mapping(
+    detected_centers: dict[str, tuple[float, float]],
+    device_size: tuple[int, int] | None,
+) -> dict:
+    if device_size is None:
+        raise RuntimeError("Screenshot size is unavailable during calibration.")
+    with (base.RESOURCE_DIR / "config" / "pacman_cookie_01_crops.json").open(
+        "r", encoding="utf-8"
+    ) as file:
+        crop_config = json.load(file)
+    reference_width, reference_height = crop_config["target_size"]
+    device_width, device_height = device_size
+    scale = device_height / reference_height
+    residuals = {}
+    max_error = 0.0
+    for key, actual in detected_centers.items():
+        x, y, width, height = crop_config["templates"][key]["bbox"]
+        source_center = (x + width / 2, y + height / 2)
+        predicted = (
+            device_width / 2 + (source_center[0] - reference_width / 2) * scale,
+            device_height / 2 + (source_center[1] - reference_height / 2) * scale,
+        )
+        error = (actual[0] - predicted[0], actual[1] - predicted[1])
+        max_error = max(max_error, abs(error[0]), abs(error[1]))
+        residuals[key] = {
+            "predicted_center": [round(predicted[0], 2), round(predicted[1], 2)],
+            "detected_center": [round(actual[0], 2), round(actual[1], 2)],
+            "error": [round(error[0], 2), round(error[1], 2)],
+        }
+        print(
+            f"[adaptive] center-map {key}: predicted=({predicted[0]:.1f},{predicted[1]:.1f}) "
+            f"detected=({actual[0]:.1f},{actual[1]:.1f}) error=({error[0]:+.1f},{error[1]:+.1f})",
+            flush=True,
+        )
+    tolerance = max(12.0, device_height * 0.03)
+    accepted = len(residuals) >= 2 and max_error <= tolerance
+    print(
+        f"[adaptive] center-map validation: accepted={accepted} "
+        f"max_error={max_error:.1f}px tolerance={tolerance:.1f}px",
+        flush=True,
+    )
+    return {
+        "mapping": "screen_center_height_scale",
+        "reference_size": [reference_width, reference_height],
+        "calibrated_device_size": [device_width, device_height],
+        "accepted": accepted,
+        "max_error_px": round(max_error, 2),
+        "tolerance_px": round(tolerance, 2),
+        "validation": residuals,
+    }
 
 
 if __name__ == "__main__":
