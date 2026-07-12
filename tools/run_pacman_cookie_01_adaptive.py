@@ -15,6 +15,7 @@ import run_pacman_cookie_01 as base
 
 ADAPTIVE_DIR_NAME = "_adaptive"
 SCALE_CACHE_PATH = base.CALIBRATION_PATH.with_name(f"{base.STAGE_ID}_template_scales.json")
+ROI_CACHE_PATH = base.CALIBRATION_PATH.with_name(f"{base.STAGE_ID}_template_rois.json")
 
 
 def scale_values(min_scale: float, max_scale: float, step: float) -> list[float]:
@@ -60,11 +61,13 @@ class AdaptiveBattleRunner(base.BattleRunner):
         adaptive_resources: dict[str, list[str]],
         scales: list[float],
         scale_cache: dict[str, float],
+        roi_cache: dict,
         **kwargs,
     ):
         self.adaptive_resources = adaptive_resources
         self.scales = scales
         self.scale_cache = scale_cache
+        self.roi_cache = roi_cache
         self.screenshot_times: list[float] = []
         self.recognition_times: dict[str, list[float]] = defaultdict(list)
         self.state_times: dict[str, list[float]] = defaultdict(list)
@@ -105,13 +108,14 @@ class AdaptiveBattleRunner(base.BattleRunner):
             [self.scales.index(cached_scale)] if cached_scale in self.scales else list(range(len(self.scales)))
         )
         templates = [self.adaptive_resources[key][index] for index in selected_indices]
+        roi = self.cached_roi(key, image)
         started = time.perf_counter()
         job = self.tasker.post_recognition(
             "TemplateMatch",
             JTemplateMatch(
                 template=templates,
                 threshold=[spec.threshold] * len(templates),
-                roi=spec.roi,
+                roi=roi,
             ),
             image,
         ).wait()
@@ -122,7 +126,7 @@ class AdaptiveBattleRunner(base.BattleRunner):
         if not hit and not log_miss:
             return None
 
-        scale_text = ""
+        scale_text = f" roi={roi}"
         if hit and detail.box is not None:
             with Image.open(spec.path) as template:
                 scale_x = detail.box.w / template.width
@@ -133,9 +137,16 @@ class AdaptiveBattleRunner(base.BattleRunner):
                 key=lambda scale: abs(scale - measured_scale),
             )
             self.scale_cache[key] = learned_scale
+            self.roi_cache.setdefault("templates", {})[key] = [
+                int(detail.box.x),
+                int(detail.box.y),
+                int(detail.box.w),
+                int(detail.box.h),
+            ]
             scale_text = (
                 f" scale=({scale_x:.3f},{scale_y:.3f})"
                 f" cached={learned_scale:.2f}"
+                f" roi={roi}"
                 f" box=({detail.box.x},{detail.box.y},{detail.box.w},{detail.box.h})"
             )
         if score is None:
@@ -143,6 +154,22 @@ class AdaptiveBattleRunner(base.BattleRunner):
         else:
             self.log(f"[detect-adaptive] {key}: hit={hit} score={score:.3f}{scale_text}")
         return detail if hit else None
+
+    def cached_roi(self, key: str, image) -> tuple[int, int, int, int]:
+        height, width = int(image.shape[0]), int(image.shape[1])
+        cached_size = self.roi_cache.get("device_size")
+        box = self.roi_cache.get("templates", {}).get(key)
+        if cached_size != [width, height] or not isinstance(box, list) or len(box) != 4:
+            return base.TEMPLATES[key].roi
+
+        x, y, box_width, box_height = (int(value) for value in box)
+        padding_x = max(48, round(box_width * 0.35))
+        padding_y = max(32, round(box_height * 0.60))
+        left = max(0, x - padding_x)
+        top = max(0, y - padding_y)
+        right = min(width, x + box_width + padding_x)
+        bottom = min(height, y + box_height + padding_y)
+        return left, top, right - left, bottom - top
 
     def print_timing_summary(self, startup_seconds: float | None = None) -> None:
         print("[timing-summary]", flush=True)
@@ -203,6 +230,10 @@ def main() -> None:
     scales = scale_values(args.min_scale, args.max_scale, args.scale_step)
     print(f"[adaptive] template scales: {', '.join(f'{value:.2f}' for value in scales)}", flush=True)
     scale_cache = load_scale_cache(scales)
+    roi_cache = load_roi_cache()
+    cached_roi_keys = sorted(roi_cache.get("templates", {}))
+    if cached_roi_keys:
+        print(f"[adaptive] cached template ROIs: {', '.join(cached_roi_keys)}", flush=True)
     if scale_cache:
         print(
             "[adaptive] cached template scales: "
@@ -214,6 +245,7 @@ def main() -> None:
         adaptive_resources=resources,
         scales=scales,
         scale_cache=scale_cache,
+        roi_cache=roi_cache,
         poll_interval=args.poll_interval,
         loading_timeout=args.loading_timeout,
         battle_timeout=args.battle_timeout,
@@ -251,12 +283,14 @@ def main() -> None:
             print("[adaptive] center mapping rejected: residual is too large; calibration not saved", flush=True)
         print(f"[adaptive] calibration hits={hits}/{len(required_keys)} preview={output}", flush=True)
         save_scale_cache(runner.scale_cache, scales)
+        save_roi_cache(runner.roi_cache, runner.screen_size)
         runner.print_timing_summary(startup_seconds)
         return
     try:
         runner.run_many(args.runs)
     finally:
         save_scale_cache(runner.scale_cache, scales)
+        save_roi_cache(runner.roi_cache, runner.screen_size)
         runner.print_timing_summary(startup_seconds)
 
 
@@ -286,6 +320,28 @@ def save_scale_cache(cache: dict[str, float], scales: list[float]) -> None:
         json.dump(data, file, ensure_ascii=False, indent=2)
         file.write("\n")
     print(f"[adaptive] template scale cache saved: {SCALE_CACHE_PATH}", flush=True)
+
+
+def load_roi_cache() -> dict:
+    if not ROI_CACHE_PATH.exists():
+        return {"templates": {}}
+    with ROI_CACHE_PATH.open("r", encoding="utf-8") as file:
+        data = json.load(file)
+    if not isinstance(data.get("templates"), dict):
+        return {"templates": {}}
+    return data
+
+
+def save_roi_cache(cache: dict, device_size: tuple[int, int] | None) -> None:
+    templates = cache.get("templates", {})
+    if not templates or device_size is None:
+        return
+    cache["device_size"] = list(device_size)
+    ROI_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with ROI_CACHE_PATH.open("w", encoding="utf-8") as file:
+        json.dump(cache, file, ensure_ascii=False, indent=2)
+        file.write("\n")
+    print(f"[adaptive] template ROI cache saved: {ROI_CACHE_PATH}", flush=True)
 
 
 def validate_center_mapping(
