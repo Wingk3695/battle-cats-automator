@@ -173,3 +173,11 @@ uv run python tools/run_event_gacha.py --runs 1
 ```
 
 如果长时间既检测不到结果页 OK，也检测不到 Gacha 页面，会保存 debug 截图到 `captures/debug` 并停止。
+
+最快固定点版本：
+
+```powershell
+uv run python tools/run_event_gacha_fast_click.py --clicks 80
+```
+
+默认点击点是 `(1240, 600)`，位于十连按钮和结果 OK 按钮的重叠可点击区域。需要调速时使用 `--interval`。
