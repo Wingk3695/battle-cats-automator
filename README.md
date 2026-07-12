@@ -1,5 +1,7 @@
 # battle-cat-automator
 
+**This repo is done by Codex with my idea. Use as your own risk.**
+
 最小流程：
 
 ```text
