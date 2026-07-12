@@ -62,12 +62,14 @@ class AdaptiveBattleRunner(base.BattleRunner):
         scales: list[float],
         scale_cache: dict[str, float],
         roi_cache: dict,
+        timing_enabled: bool,
         **kwargs,
     ):
         self.adaptive_resources = adaptive_resources
         self.scales = scales
         self.scale_cache = scale_cache
         self.roi_cache = roi_cache
+        self.timing_enabled = timing_enabled
         self.screenshot_times: list[float] = []
         self.recognition_times: dict[str, list[float]] = defaultdict(list)
         self.state_times: dict[str, list[float]] = defaultdict(list)
@@ -76,6 +78,9 @@ class AdaptiveBattleRunner(base.BattleRunner):
         super().__init__(**kwargs)
 
     def run(self) -> None:
+        if not self.timing_enabled:
+            super().run()
+            return
         started = time.perf_counter()
         self._state_timer = started
         try:
@@ -84,6 +89,9 @@ class AdaptiveBattleRunner(base.BattleRunner):
             self.run_times.append(time.perf_counter() - started)
 
     def transition(self, old: base.State, new: base.State) -> None:
+        if not self.timing_enabled:
+            super().transition(old, new)
+            return
         now = time.perf_counter()
         if self._state_timer is not None:
             elapsed = now - self._state_timer
@@ -93,6 +101,8 @@ class AdaptiveBattleRunner(base.BattleRunner):
         super().transition(old, new)
 
     def screenshot(self):
+        if not self.timing_enabled:
+            return super().screenshot()
         started = time.perf_counter()
         try:
             return super().screenshot()
@@ -109,7 +119,7 @@ class AdaptiveBattleRunner(base.BattleRunner):
         )
         templates = [self.adaptive_resources[key][index] for index in selected_indices]
         roi = self.cached_roi(key, image)
-        started = time.perf_counter()
+        started = time.perf_counter() if self.timing_enabled else None
         job = self.tasker.post_recognition(
             "TemplateMatch",
             JTemplateMatch(
@@ -120,7 +130,8 @@ class AdaptiveBattleRunner(base.BattleRunner):
             image,
         ).wait()
         detail = base.recognition_detail_from_result(job.get())
-        self.recognition_times[key].append(time.perf_counter() - started)
+        if started is not None:
+            self.recognition_times[key].append(time.perf_counter() - started)
         hit = bool(detail and detail.hit)
         score = base.best_score(detail)
         if not hit and not log_miss:
@@ -172,6 +183,8 @@ class AdaptiveBattleRunner(base.BattleRunner):
         return left, top, right - left, bottom - top
 
     def print_timing_summary(self, startup_seconds: float | None = None) -> None:
+        if not self.timing_enabled:
+            return
         print("[timing-summary]", flush=True)
         if startup_seconds is not None:
             print(f"  startup: {startup_seconds:.3f}s", flush=True)
@@ -211,6 +224,7 @@ def main() -> None:
     parser.add_argument("--click-interval", type=float, default=2.0)
     parser.add_argument("--runs", type=int, default=1)
     parser.add_argument("--start-only", action="store_true")
+    parser.add_argument("--timing", action="store_true", help="Collect and print performance timing metrics.")
     parser.add_argument(
         "--calibrate-only",
         action="store_true",
@@ -246,6 +260,7 @@ def main() -> None:
         scales=scales,
         scale_cache=scale_cache,
         roi_cache=roi_cache,
+        timing_enabled=args.timing,
         poll_interval=args.poll_interval,
         loading_timeout=args.loading_timeout,
         battle_timeout=args.battle_timeout,
@@ -311,15 +326,12 @@ def load_scale_cache(scales: list[float]) -> dict[str, float]:
 def save_scale_cache(cache: dict[str, float], scales: list[float]) -> None:
     if not cache:
         return
-    SCALE_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
     data = {
         "allowed_scales": scales,
         "templates": {key: cache[key] for key in sorted(cache)},
     }
-    with SCALE_CACHE_PATH.open("w", encoding="utf-8") as file:
-        json.dump(data, file, ensure_ascii=False, indent=2)
-        file.write("\n")
-    print(f"[adaptive] template scale cache saved: {SCALE_CACHE_PATH}", flush=True)
+    if write_json_if_changed(SCALE_CACHE_PATH, data):
+        print(f"[adaptive] template scale cache saved: {SCALE_CACHE_PATH}", flush=True)
 
 
 def load_roi_cache() -> dict:
@@ -337,11 +349,23 @@ def save_roi_cache(cache: dict, device_size: tuple[int, int] | None) -> None:
     if not templates or device_size is None:
         return
     cache["device_size"] = list(device_size)
-    ROI_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with ROI_CACHE_PATH.open("w", encoding="utf-8") as file:
-        json.dump(cache, file, ensure_ascii=False, indent=2)
+    if write_json_if_changed(ROI_CACHE_PATH, cache):
+        print(f"[adaptive] template ROI cache saved: {ROI_CACHE_PATH}", flush=True)
+
+
+def write_json_if_changed(path: Path, data: dict) -> bool:
+    if path.exists():
+        try:
+            with path.open("r", encoding="utf-8") as file:
+                if json.load(file) == data:
+                    return False
+        except (OSError, ValueError, TypeError):
+            pass
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as file:
+        json.dump(data, file, ensure_ascii=False, indent=2)
         file.write("\n")
-    print(f"[adaptive] template ROI cache saved: {ROI_CACHE_PATH}", flush=True)
+    return True
 
 
 def validate_center_mapping(
