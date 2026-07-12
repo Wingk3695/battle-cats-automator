@@ -1,0 +1,46 @@
+{
+  "DetectStageReadyMarker": {
+    "recognition": "TemplateMatch",
+    "template": "pacman_cookie_01/stage_ready_marker.png",
+    "threshold": 0.8,
+    "action": "DoNothing"
+  },
+  "ClickStageStart": {
+    "recognition": "TemplateMatch",
+    "template": "pacman_cookie_01/start_button.png",
+    "threshold": 0.8,
+    "action": "Click",
+    "target": true
+  },
+  "DetectBattleUi": {
+    "recognition": "TemplateMatch",
+    "template": "pacman_cookie_01/battle_ui_marker.png",
+    "threshold": 0.8,
+    "action": "DoNothing"
+  },
+  "DetectVictory": {
+    "recognition": "TemplateMatch",
+    "template": "pacman_cookie_01/victory.png",
+    "threshold": 0.8,
+    "action": "DoNothing"
+  },
+  "ClickResultMapButton": {
+    "recognition": "TemplateMatch",
+    "template": "pacman_cookie_01/result_map_button.png",
+    "threshold": 0.8,
+    "action": "Click",
+    "target": true
+  },
+  "DetectLeadershipRestoreDialog": {
+    "recognition": "TemplateMatch",
+    "template": "pacman_cookie_01/leadership_restore_dialog.png",
+    "threshold": 0.8,
+    "action": "DoNothing"
+  },
+  "DetectExStagePrompt": {
+    "recognition": "TemplateMatch",
+    "template": "pacman_cookie_01/ex_stage_prompt.png",
+    "threshold": 0.8,
+    "action": "DoNothing"
+  }
+}

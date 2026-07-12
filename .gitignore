@@ -1,0 +1,21 @@
+# Python / uv
+.venv/
+.uv-cache/
+__pycache__/
+*.py[cod]
+
+# MaaFramework runtime state
+.maa/debug/
+.maa/config/
+
+# Runtime screenshots and generated previews
+captures/*
+!captures/.gitkeep
+
+# Local/editor noise
+.env
+.env.*
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

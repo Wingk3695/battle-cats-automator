@@ -1,0 +1,49 @@
+{
+  "target_size": [1584, 720],
+  "sources": {
+    "gacha_ready": {
+      "import": "D:/QQFiles/Tencent Files/1647400627/nt_qq/nt_data/Pic/2026-07/Ori/a8701433764537c4f476adc8015a9569.jpeg",
+      "source": "resource/source/event_gacha/gacha_ready.jpeg",
+      "normalized_source": "resource/source/event_gacha/gacha_ready_1584x720.png",
+      "preview": "captures/event_gacha_ready_templates_preview.png"
+    },
+    "result_limited_character": {
+      "import": "D:/QQFiles/Tencent Files/1647400627/nt_qq/nt_data/Pic/2026-07/Ori/68824ba4624fd13fad7fef89b71385ac.jpeg",
+      "source": "resource/source/event_gacha/result_limited_character.jpeg",
+      "normalized_source": "resource/source/event_gacha/result_limited_character_1584x720.png",
+      "preview": "captures/event_gacha_result_limited_character_templates_preview.png"
+    },
+    "result_catfood": {
+      "import": "D:/QQFiles/Tencent Files/1647400627/nt_qq/nt_data/Pic/2026-07/Ori/ed8592908698eb4858bdc5b360892149.jpeg",
+      "source": "resource/source/event_gacha/result_catfood.jpeg",
+      "normalized_source": "resource/source/event_gacha/result_catfood_1584x720.png",
+      "preview": "captures/event_gacha_result_catfood_templates_preview.png"
+    },
+    "result_xp": {
+      "import": "D:/QQFiles/Tencent Files/1647400627/nt_qq/nt_data/Pic/2026-07/Ori/6aca100e3bafecfa1b59234029702b3e.jpeg",
+      "source": "resource/source/event_gacha/result_xp.jpeg",
+      "normalized_source": "resource/source/event_gacha/result_xp_1584x720.png",
+      "preview": "captures/event_gacha_result_xp_templates_preview.png"
+    }
+  },
+  "templates": {
+    "gacha_ready_marker": {
+      "source": "gacha_ready",
+      "bbox": [125, 9, 265, 52],
+      "output": "resource/image/event_gacha/gacha_ready_marker.png",
+      "description": "Event gacha page title."
+    },
+    "ten_pull_button": {
+      "source": "gacha_ready",
+      "bbox": [1190, 532, 289, 119],
+      "output": "resource/image/event_gacha/ten_pull_button.png",
+      "description": "10-pull button."
+    },
+    "result_ok_button": {
+      "source": "result_xp",
+      "bbox": [1134, 572, 103, 59],
+      "output": "resource/image/event_gacha/result_ok_button.png",
+      "description": "Common OK lettering on gacha result pages."
+    }
+  }
+}

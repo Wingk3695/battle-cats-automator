@@ -1,0 +1,85 @@
+{
+  "target_size": [1584, 720],
+  "sources": {
+    "stage_ready": {
+      "import": "D:/QQFiles/Tencent Files/1647400627/nt_qq/nt_data/Pic/2026-07/Ori/99e906b3b4c28a022b4ee73abf788f76.jpeg",
+      "source": "resource/source/pacman_cookie_01/stage_ready.jpeg",
+      "normalized_source": "resource/source/pacman_cookie_01/stage_ready_1584x720.png",
+      "preview": "captures/pacman_cookie_01_stage_ready_templates_preview.png"
+    },
+    "battle": {
+      "import": "D:/QQFiles/Tencent Files/1647400627/nt_qq/nt_data/Pic/2026-07/Ori/917a1da8aacee38a2a190caea9fda021.jpeg",
+      "source": "resource/source/pacman_cookie_01/battle.jpeg",
+      "normalized_source": "resource/source/pacman_cookie_01/battle_1584x720.png",
+      "preview": "captures/pacman_cookie_01_battle_templates_preview.png"
+    },
+    "leadership_restore": {
+      "import": "D:/QQFiles/Tencent Files/1647400627/nt_qq/nt_data/Pic/2026-07/Ori/42332f8ed1705b31eeb94379d0b7c6a9.jpeg",
+      "source": "resource/source/pacman_cookie_01/leadership_restore.jpeg",
+      "normalized_source": "resource/source/pacman_cookie_01/leadership_restore_1584x720.png",
+      "preview": "captures/pacman_cookie_01_leadership_restore_templates_preview.png"
+    },
+    "result_popup": {
+      "import": "D:/QQFiles/Tencent Files/1647400627/nt_qq/nt_data/Pic/2026-07/Ori/96ea18a5bb7768071245a0c3c41a8e15.jpeg",
+      "source": "resource/source/pacman_cookie_01/result_popup.jpeg",
+      "normalized_source": "resource/source/pacman_cookie_01/result_popup_1584x720.png",
+      "preview": "captures/pacman_cookie_01_result_popup_templates_preview.png"
+    },
+    "final_result": {
+      "import": "D:/QQFiles/Tencent Files/1647400627/nt_qq/nt_data/Pic/2026-07/Ori/0eb90e30d01becfe374c9d2b78471e06.jpeg",
+      "source": "resource/source/pacman_cookie_01/final_result.jpeg",
+      "normalized_source": "resource/source/pacman_cookie_01/final_result_1584x720.png",
+      "preview": "captures/pacman_cookie_01_final_result_templates_preview.png"
+    },
+    "ex_stage_prompt": {
+      "import": "D:/QQFiles/Tencent Files/1647400627/nt_qq/nt_data/Pic/2026-07/Ori/7862de8dabcc2764f964b0656fc2fdae.jpeg",
+      "source": "resource/source/pacman_cookie_01/ex_stage_prompt.jpeg",
+      "normalized_source": "resource/source/pacman_cookie_01/ex_stage_prompt_1584x720.png",
+      "preview": "captures/pacman_cookie_01_ex_stage_prompt_templates_preview.png"
+    }
+  },
+  "templates": {
+    "stage_ready_marker": {
+      "source": "stage_ready",
+      "bbox": [674, 85, 282, 78],
+      "output": "resource/image/pacman_cookie_01/stage_ready_marker.png",
+      "description": "Stage name white box only; excludes clear count and stamina values."
+    },
+    "start_button": {
+      "source": "stage_ready",
+      "bbox": [1115, 459, 382, 92],
+      "output": "resource/image/pacman_cookie_01/start_button.png",
+      "description": "Yellow sortie button."
+    },
+    "battle_ui_marker": {
+      "source": "battle",
+      "bbox": [121, 8, 60, 61],
+      "output": "resource/image/pacman_cookie_01/battle_ui_marker.png",
+      "description": "Top-left pause button only; does not depend on a specific stage name."
+    },
+    "victory": {
+      "source": "final_result",
+      "bbox": [527, 219, 536, 116],
+      "output": "resource/image/pacman_cookie_01/victory.png",
+      "description": "Complete victory text."
+    },
+    "result_map_button": {
+      "source": "final_result",
+      "bbox": [1381, 15, 82, 82],
+      "output": "resource/image/pacman_cookie_01/result_map_button.png",
+      "description": "Top-right map button on final result page."
+    },
+    "leadership_restore_dialog": {
+      "source": "leadership_restore",
+      "bbox": [495, 305, 620, 79],
+      "output": "resource/image/pacman_cookie_01/leadership_restore_dialog.png",
+      "description": "Leadership shortage dialog text; excludes dynamic stamina numbers, timer, and flag count."
+    },
+    "ex_stage_prompt": {
+      "source": "ex_stage_prompt",
+      "bbox": [400, 258, 790, 144],
+      "output": "resource/image/pacman_cookie_01/ex_stage_prompt.png",
+      "description": "EX stage prompt text; excludes buttons and darkened result buttons."
+    }
+  }
+}
