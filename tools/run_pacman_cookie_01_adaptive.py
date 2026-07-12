@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
+import time
+from collections import defaultdict
 from pathlib import Path
 
 from PIL import Image, ImageDraw
@@ -53,13 +55,43 @@ def build_scaled_templates(scales: list[float], keys: tuple[str, ...]) -> dict[s
 class AdaptiveBattleRunner(base.BattleRunner):
     def __init__(self, *, adaptive_resources: dict[str, list[str]], **kwargs):
         self.adaptive_resources = adaptive_resources
+        self.screenshot_times: list[float] = []
+        self.recognition_times: dict[str, list[float]] = defaultdict(list)
+        self.state_times: dict[str, list[float]] = defaultdict(list)
+        self.run_times: list[float] = []
+        self._state_timer: float | None = None
         super().__init__(**kwargs)
+
+    def run(self) -> None:
+        started = time.perf_counter()
+        self._state_timer = started
+        try:
+            super().run()
+        finally:
+            self.run_times.append(time.perf_counter() - started)
+
+    def transition(self, old: base.State, new: base.State) -> None:
+        now = time.perf_counter()
+        if self._state_timer is not None:
+            elapsed = now - self._state_timer
+            self.state_times[old.value].append(elapsed)
+            self.log(f"[timing] state {old.value}: {elapsed:.3f}s")
+        self._state_timer = now
+        super().transition(old, new)
+
+    def screenshot(self):
+        started = time.perf_counter()
+        try:
+            return super().screenshot()
+        finally:
+            self.screenshot_times.append(time.perf_counter() - started)
 
     def recognize(self, key: str, image=None, log_miss: bool = True):
         spec = base.TEMPLATES[key]
         if image is None:
             image = self.screenshot()
         templates = self.adaptive_resources[key]
+        started = time.perf_counter()
         job = self.tasker.post_recognition(
             "TemplateMatch",
             JTemplateMatch(
@@ -70,6 +102,7 @@ class AdaptiveBattleRunner(base.BattleRunner):
             image,
         ).wait()
         detail = base.recognition_detail_from_result(job.get())
+        self.recognition_times[key].append(time.perf_counter() - started)
         hit = bool(detail and detail.hit)
         score = base.best_score(detail)
         if not hit and not log_miss:
@@ -90,8 +123,36 @@ class AdaptiveBattleRunner(base.BattleRunner):
             self.log(f"[detect-adaptive] {key}: hit={hit} score={score:.3f}{scale_text}")
         return detail if hit else None
 
+    def print_timing_summary(self, startup_seconds: float | None = None) -> None:
+        print("[timing-summary]", flush=True)
+        if startup_seconds is not None:
+            print(f"  startup: {startup_seconds:.3f}s", flush=True)
+        if self.run_times:
+            print(
+                f"  runs: count={len(self.run_times)} total={sum(self.run_times):.3f}s "
+                f"avg={sum(self.run_times) / len(self.run_times):.3f}s",
+                flush=True,
+            )
+        print_timing_line("screenshot", self.screenshot_times)
+        for key, values in sorted(self.recognition_times.items()):
+            print_timing_line(f"recognize.{key}", values)
+        for state, values in self.state_times.items():
+            print_timing_line(f"state.{state}", values)
+
+
+def print_timing_line(name: str, values: list[float]) -> None:
+    if not values:
+        return
+    total = sum(values)
+    print(
+        f"  {name}: count={len(values)} total={total:.3f}s "
+        f"avg={total / len(values):.3f}s max={max(values):.3f}s",
+        flush=True,
+    )
+
 
 def main() -> None:
+    startup_started = time.perf_counter()
     parser = argparse.ArgumentParser(
         description="Run pacman_cookie_01 with bounded multi-scale template matching."
     )
@@ -130,6 +191,7 @@ def main() -> None:
         click_interval=args.click_interval,
         start_only=limited_mode,
     )
+    startup_seconds = time.perf_counter() - startup_started
     if args.calibrate_only:
         image = runner.screenshot()
         preview = Image.fromarray(image[:, :, ::-1])
@@ -158,8 +220,12 @@ def main() -> None:
         elif hits == len(required_keys):
             print("[adaptive] center mapping rejected: residual is too large; calibration not saved", flush=True)
         print(f"[adaptive] calibration hits={hits}/{len(required_keys)} preview={output}", flush=True)
+        runner.print_timing_summary(startup_seconds)
         return
-    runner.run_many(args.runs)
+    try:
+        runner.run_many(args.runs)
+    finally:
+        runner.print_timing_summary(startup_seconds)
 
 
 def validate_center_mapping(
