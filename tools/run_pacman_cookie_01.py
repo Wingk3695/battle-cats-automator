@@ -210,10 +210,18 @@ class BattleRunner:
         raise TimeoutError("FINISHED: stage ready page was not detected after clicking map button.")
 
     def handle_interrupts(self, image: np.ndarray, state: State) -> State | None:
-        if not self.start_only and self.detect("leadership_restore_dialog", image, log_miss=False):
+        if (
+            not self.start_only
+            and state == State.BATTLE_LOADING
+            and self.detect("leadership_restore_dialog", image, log_miss=False)
+        ):
             return self.resolve_leadership_restore()
 
-        if not self.start_only and self.detect("ex_stage_prompt", image, log_miss=False):
+        if (
+            not self.start_only
+            and state == State.WAIT_FOR_VICTORY
+            and self.detect("ex_stage_prompt", image, log_miss=False)
+        ):
             return self.resolve_ex_stage_prompt()
 
         return None

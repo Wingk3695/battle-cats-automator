@@ -14,6 +14,7 @@ import run_pacman_cookie_01 as base
 
 
 ADAPTIVE_DIR_NAME = "_adaptive"
+SCALE_CACHE_PATH = base.CALIBRATION_PATH.with_name(f"{base.STAGE_ID}_template_scales.json")
 
 
 def scale_values(min_scale: float, max_scale: float, step: float) -> list[float]:
@@ -53,8 +54,17 @@ def build_scaled_templates(scales: list[float], keys: tuple[str, ...]) -> dict[s
 
 
 class AdaptiveBattleRunner(base.BattleRunner):
-    def __init__(self, *, adaptive_resources: dict[str, list[str]], **kwargs):
+    def __init__(
+        self,
+        *,
+        adaptive_resources: dict[str, list[str]],
+        scales: list[float],
+        scale_cache: dict[str, float],
+        **kwargs,
+    ):
         self.adaptive_resources = adaptive_resources
+        self.scales = scales
+        self.scale_cache = scale_cache
         self.screenshot_times: list[float] = []
         self.recognition_times: dict[str, list[float]] = defaultdict(list)
         self.state_times: dict[str, list[float]] = defaultdict(list)
@@ -90,7 +100,11 @@ class AdaptiveBattleRunner(base.BattleRunner):
         spec = base.TEMPLATES[key]
         if image is None:
             image = self.screenshot()
-        templates = self.adaptive_resources[key]
+        cached_scale = self.scale_cache.get(key)
+        selected_indices = (
+            [self.scales.index(cached_scale)] if cached_scale in self.scales else list(range(len(self.scales)))
+        )
+        templates = [self.adaptive_resources[key][index] for index in selected_indices]
         started = time.perf_counter()
         job = self.tasker.post_recognition(
             "TemplateMatch",
@@ -113,8 +127,15 @@ class AdaptiveBattleRunner(base.BattleRunner):
             with Image.open(spec.path) as template:
                 scale_x = detail.box.w / template.width
                 scale_y = detail.box.h / template.height
+            measured_scale = (scale_x + scale_y) / 2
+            learned_scale = min(
+                (self.scales[index] for index in selected_indices),
+                key=lambda scale: abs(scale - measured_scale),
+            )
+            self.scale_cache[key] = learned_scale
             scale_text = (
                 f" scale=({scale_x:.3f},{scale_y:.3f})"
+                f" cached={learned_scale:.2f}"
                 f" box=({detail.box.x},{detail.box.y},{detail.box.w},{detail.box.h})"
             )
         if score is None:
@@ -168,8 +189,8 @@ def main() -> None:
         action="store_true",
         help="Detect the stage marker and start button once, save a preview, and do not click.",
     )
-    parser.add_argument("--min-scale", type=float, default=0.80)
-    parser.add_argument("--max-scale", type=float, default=1.25)
+    parser.add_argument("--min-scale", type=float, default=1.00)
+    parser.add_argument("--max-scale", type=float, default=1.05)
     parser.add_argument("--scale-step", type=float, default=0.05)
     args = parser.parse_args()
     if args.runs < 1:
@@ -181,9 +202,18 @@ def main() -> None:
     base.require_assets(required_keys=required_keys, require_slot=not limited_mode)
     scales = scale_values(args.min_scale, args.max_scale, args.scale_step)
     print(f"[adaptive] template scales: {', '.join(f'{value:.2f}' for value in scales)}", flush=True)
+    scale_cache = load_scale_cache(scales)
+    if scale_cache:
+        print(
+            "[adaptive] cached template scales: "
+            + ", ".join(f"{key}={value:.2f}" for key, value in sorted(scale_cache.items())),
+            flush=True,
+        )
     resources = build_scaled_templates(scales, required_keys)
     runner = AdaptiveBattleRunner(
         adaptive_resources=resources,
+        scales=scales,
+        scale_cache=scale_cache,
         poll_interval=args.poll_interval,
         loading_timeout=args.loading_timeout,
         battle_timeout=args.battle_timeout,
@@ -220,12 +250,42 @@ def main() -> None:
         elif hits == len(required_keys):
             print("[adaptive] center mapping rejected: residual is too large; calibration not saved", flush=True)
         print(f"[adaptive] calibration hits={hits}/{len(required_keys)} preview={output}", flush=True)
+        save_scale_cache(runner.scale_cache, scales)
         runner.print_timing_summary(startup_seconds)
         return
     try:
         runner.run_many(args.runs)
     finally:
+        save_scale_cache(runner.scale_cache, scales)
         runner.print_timing_summary(startup_seconds)
+
+
+def load_scale_cache(scales: list[float]) -> dict[str, float]:
+    if not SCALE_CACHE_PATH.exists():
+        return {}
+    with SCALE_CACHE_PATH.open("r", encoding="utf-8") as file:
+        data = json.load(file)
+    cached = data.get("templates", {})
+    valid = {}
+    for key, value in cached.items():
+        scale = round(float(value), 4)
+        if key in base.TEMPLATES and scale in scales:
+            valid[key] = scale
+    return valid
+
+
+def save_scale_cache(cache: dict[str, float], scales: list[float]) -> None:
+    if not cache:
+        return
+    SCALE_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    data = {
+        "allowed_scales": scales,
+        "templates": {key: cache[key] for key in sorted(cache)},
+    }
+    with SCALE_CACHE_PATH.open("w", encoding="utf-8") as file:
+        json.dump(data, file, ensure_ascii=False, indent=2)
+        file.write("\n")
+    print(f"[adaptive] template scale cache saved: {SCALE_CACHE_PATH}", flush=True)
 
 
 def validate_center_mapping(
