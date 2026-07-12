@@ -33,10 +33,16 @@ def make_adb_controller(index: int = 0) -> AdbController:
         )
 
     device = devices[index]
+    screencap_methods = device.screencap_methods or MaaAdbScreencapMethodEnum.Default
+    print(
+        f"[controller] screencap candidates={screencap_methods} "
+        f"({format_screencap_methods(screencap_methods)})",
+        flush=True,
+    )
     controller = AdbController(
         adb_path=device.adb_path,
         address=device.address,
-        screencap_methods=MaaAdbScreencapMethodEnum.EncodeToFileAndPull,
+        screencap_methods=screencap_methods,
         input_methods=MaaAdbInputMethodEnum.AdbShell,
         config=device.config,
     )
@@ -44,6 +50,24 @@ def make_adb_controller(index: int = 0) -> AdbController:
     if not controller.connected:
         raise RuntimeError(f"Failed to connect ADB device: {device.address}")
     return controller
+
+
+def format_screencap_methods(mask: int) -> str:
+    methods = (
+        MaaAdbScreencapMethodEnum.EncodeToFileAndPull,
+        MaaAdbScreencapMethodEnum.Encode,
+        MaaAdbScreencapMethodEnum.RawWithGzip,
+        MaaAdbScreencapMethodEnum.RawByNetcat,
+        MaaAdbScreencapMethodEnum.MinicapDirect,
+        MaaAdbScreencapMethodEnum.MinicapStream,
+        MaaAdbScreencapMethodEnum.EmulatorExtras,
+    )
+    names = [
+        method.name
+        for method in methods
+        if mask & int(method)
+    ]
+    return " | ".join(names) if names else "none"
 
 
 def describe_device(device: Any) -> str:
