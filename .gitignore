@@ -1,6 +1,7 @@
 # Python / uv
 .venv/
 .uv-cache/
+resource/image/pacman_cookie_01/_adaptive/
 __pycache__/
 *.py[cod]
 
