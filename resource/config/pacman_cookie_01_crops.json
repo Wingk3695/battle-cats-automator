@@ -47,9 +47,9 @@
     },
     "start_button": {
       "source": "stage_ready",
-      "bbox": [1115, 459, 382, 92],
+      "bbox": [1155, 474, 255, 58],
       "output": "resource/image/pacman_cookie_01/start_button.png",
-      "description": "Yellow sortie button."
+      "description": "Stable sortie text and yellow button interior; excludes device-dependent border and side filler."
     },
     "battle_ui_marker": {
       "source": "battle",
