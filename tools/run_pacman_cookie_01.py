@@ -174,8 +174,7 @@ class BattleRunner:
         if state == State.FINAL_RESULT:
             self.log("[FINAL_RESULT] click map button")
             self.click_template("result_map_button", image)
-            self.confirm_back_to_stage_ready()
-            return State.FINISHED
+            return self.confirm_back_to_stage_ready()
 
         return state
 
@@ -195,17 +194,16 @@ class BattleRunner:
         self.log("[RESULT] close overlay attempt")
         self.controller.post_click(x, y).wait()
 
-    def confirm_back_to_stage_ready(self) -> None:
+    def confirm_back_to_stage_ready(self) -> State:
         deadline = time.monotonic() + 30.0
         while time.monotonic() < deadline:
             image = self.screenshot()
             interrupted_state = self.handle_interrupts(image, State.FINAL_RESULT)
             if interrupted_state is not None:
-                time.sleep(self.poll_interval)
-                continue
+                return interrupted_state
             if self.detect_stage_ready(image):
                 self.log("[FINISHED] returned to stage ready")
-                return
+                return State.FINISHED
             time.sleep(self.poll_interval)
         raise TimeoutError("FINISHED: stage ready page was not detected after clicking map button.")
 
@@ -219,7 +217,7 @@ class BattleRunner:
 
         if (
             not self.start_only
-            and state == State.WAIT_FOR_VICTORY
+            and state in (State.WAIT_FOR_VICTORY, State.FINAL_RESULT)
             and self.detect("ex_stage_prompt", image, log_miss=False)
         ):
             return self.resolve_ex_stage_prompt()
