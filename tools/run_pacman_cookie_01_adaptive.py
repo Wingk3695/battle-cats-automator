@@ -218,6 +218,7 @@ def main() -> None:
         description="Run pacman_cookie_01 with bounded multi-scale template matching."
     )
     parser.add_argument("--poll-interval", type=float, default=0.5)
+    parser.add_argument("--ready-timeout", type=float, default=5.0)
     parser.add_argument("--loading-timeout", type=float, default=45.0)
     parser.add_argument("--battle-timeout", type=float, default=240.0)
     parser.add_argument("--result-timeout", type=float, default=60.0)
@@ -262,6 +263,7 @@ def main() -> None:
         roi_cache=roi_cache,
         timing_enabled=args.timing,
         poll_interval=args.poll_interval,
+        ready_timeout=args.ready_timeout,
         loading_timeout=args.loading_timeout,
         battle_timeout=args.battle_timeout,
         result_timeout=args.result_timeout,

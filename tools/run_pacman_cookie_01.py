@@ -66,6 +66,7 @@ class BattleRunner:
     def __init__(
         self,
         poll_interval: float,
+        ready_timeout: float,
         loading_timeout: float,
         battle_timeout: float,
         result_timeout: float,
@@ -73,6 +74,7 @@ class BattleRunner:
         start_only: bool,
     ):
         self.poll_interval = poll_interval
+        self.ready_timeout = ready_timeout
         self.loading_timeout = loading_timeout
         self.battle_timeout = battle_timeout
         self.result_timeout = result_timeout
@@ -127,8 +129,16 @@ class BattleRunner:
     def step_state(self, state: State, image: np.ndarray, state_started: float) -> State:
         if state == State.UNKNOWN:
             if not self.detect_stage_ready(image):
+                elapsed = time.monotonic() - state_started
+                if elapsed <= self.ready_timeout:
+                    self.log(
+                        f"[UNKNOWN] stage page not stable; retry "
+                        f"({elapsed:.1f}/{self.ready_timeout:.1f}s)"
+                    )
+                    return state
                 raise RuntimeError(
                     "UNKNOWN: stage ready marker and start button were not both detected. "
+                    f"They were not simultaneously detected within {self.ready_timeout:.1f}s. "
                     "Put the phone on the target sortie page."
                 )
             return State.STAGE_READY
@@ -333,6 +343,7 @@ class BattleRunner:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run the fixed pacman_cookie_01 battle loop.")
     parser.add_argument("--poll-interval", type=float, default=0.5)
+    parser.add_argument("--ready-timeout", type=float, default=5.0)
     parser.add_argument("--loading-timeout", type=float, default=45.0)
     parser.add_argument("--battle-timeout", type=float, default=240.0)
     parser.add_argument("--result-timeout", type=float, default=60.0)
@@ -352,6 +363,7 @@ def main() -> None:
     require_assets(required_keys=required_keys, require_slot=not args.start_only)
     runner = BattleRunner(
         poll_interval=args.poll_interval,
+        ready_timeout=args.ready_timeout,
         loading_timeout=args.loading_timeout,
         battle_timeout=args.battle_timeout,
         result_timeout=args.result_timeout,
